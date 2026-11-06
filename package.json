@@ -1,0 +1,19 @@
+{
+  "name": "create_asar",
+  "version": "1.0.0",
+  "description": "为 QQNT 生成注入 LiteLoader 宿主的 app.asar",
+  "main": "build-asar.js",
+  "scripts": {
+    "build": "node build-asar.js",
+    "install": "node install.js",
+    "status": "node install.js --status",
+    "restore": "node install.js --restore"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@electron/asar": "^4.3.1"
+  }
+}
