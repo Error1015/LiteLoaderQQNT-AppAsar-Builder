@@ -72,13 +72,30 @@ function readRc() {
     }
 }
 
+const WIN_ABS = /^[A-Za-z]:[\\/]/;
+const UNC_PATH = /^\\\\/;
+
+/**
+ * 解析外部传入的路径。
+ *
+ * Windows 盘符路径与 UNC 路径必须原样保留：GitHub Actions 跑在 Linux runner 上，
+ * path.resolve("C:/LiteLoaderQQNT") 会得到 /home/runner/work/.../C:/LiteLoaderQQNT，
+ * 这个值被写进产物后在 Windows 上永远不存在，等于把"构建时固定宿主路径"彻底废掉。
+ */
+function resolveExternal(input, fallback) {
+    const raw = String(input || fallback || "").trim();
+    if (!raw) return "";
+    if (WIN_ABS.test(raw) || UNC_PATH.test(raw)) return raw.replace(/\//g, "\\");
+    return path.resolve(raw);
+}
+
 const rc = readRc();
 const cfg = rc.data || {};
 
-const loaderPath = path.resolve(arg("loader") || process.env.LQ_LOADER || cfg.loader || DEFAULT_LOADER);
-const qqDir = path.resolve(arg("qq") || process.env.LQ_QQ_DIR || cfg.qq || DEFAULT_QQ);
-const outDir = path.resolve(arg("out") || process.env.LQ_OUT || cfg.out || ROOT);
-const manifestOverride = arg("manifest") || process.env.LQ_MANIFEST || cfg.manifest || "";
+const loaderPath = resolveExternal(arg("loader") || process.env.LQ_LOADER || cfg.loader, DEFAULT_LOADER);
+const qqDir = resolveExternal(arg("qq") || process.env.LQ_QQ_DIR || cfg.qq, DEFAULT_QQ);
+const outDir = resolveExternal(arg("out") || process.env.LQ_OUT || cfg.out, ROOT);
+const manifestOverride = resolveExternal(arg("manifest") || process.env.LQ_MANIFEST || cfg.manifest, "");
 const qqVersionOverride = arg("qq-version") || process.env.LQ_QQ_VERSION || cfg.qqVersion || "";
 const buildVersionOverride = arg("build-version") || process.env.LQ_BUILD_VERSION || cfg.buildVersion || "";
 const allowMissingLoader = flag("allow-missing-loader");
@@ -112,7 +129,7 @@ function readOfficialManifest() {
 /** 解析基线清单：显式指定 > 本地 QQ > 内置默认 */
 function resolveBaseManifest() {
     if (manifestOverride) {
-        const file = path.resolve(manifestOverride);
+        const file = manifestOverride;
         try {
             return { data: JSON.parse(fs.readFileSync(file, "utf8")), source: `${file} (--manifest)` };
         } catch (err) {
