@@ -107,17 +107,20 @@ setx LQ_LOADER "F:\Tools\LiteLoaderQQNT"   # 设一次，之后一直有效
 
 | 方式 | 行为 |
 |---|---|
-| push tag（`v*`） | 构建 → 上传产物 → 自动创建 Release 并附上 zip |
+| push tag（`v*`） | 构建 → 上传产物 → 自动创建 Release，附件名带 `v<构建器版本>-qq<QQ版本>` |
 | 手动 Run workflow | 只构建 + 上传 artifact（30 天），可临时指定宿主路径与 QQ 版本 |
 
 ### 发版
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+# 先把 package.json 的 version 改成与 tag 一致（附件文件名取自它）
+git tag -a v1.0.1 -m "v1.0.1"
+git push origin v1.0.1
 ```
 
-仓库 Release 页会自动出现 `LiteLoaderQQNT-AppAsar.zip`（含 `app.asar` + `build-info.json`）。
+仓库 Release 页会自动出现
+`LiteLoaderQQNT-AppAsar-Builder-v1.0.1-qq9.9.37-54395.zip`（含 `app.asar` + `build-info.json`）。
+前半段 `v1.0.1` 是构建器版本（= tag = `package.json` 的 `version`），后半段 `qq9.9.37-54395` 是这份包面向的 QQ 版本，两者都不需要手工拼。
 
 ### 用 Repository variables 定制默认宿主路径
 
@@ -146,25 +149,55 @@ CI 里自动加 `--allow-missing-loader`：构建机上没有 QQ/宿主也能出
 | `node install.js --restore --qq=...` | 卸载，恢复 QQ 原生启动 |
 | `npm run build` / `deploy` / `status` / `restore` | 上述命令的 npm 别名（默认路径） |
 
-## 六、产物说明
+## 六、产物说明与版本溯源
+
+每个 Release 的产物都带**双重版本号**，文件名形如：
+
+```
+LiteLoaderQQNT-AppAsar-Builder-v1.0.1-qq9.9.37-54395.zip
+                              ^构建器版本    ^目标 QQ 版本
+```
+
+`-qq` 后面的版本来自构建时读取的 QQ 清单，可用 `--qq-version=` 覆盖。这样下载多个 Release 放进同一个文件夹也不会混淆。
+
+`build-info.json`（随 zip 一起发布）：
 
 ```json
-// build-info.json
 {
+  "builder": { "name": "LiteLoaderQQNT-AppAsar-Builder", "version": "1.0.1", "commit": "dae682e", "ref": "v1.0.1", "ci": true },
   "builtAt": "2026-11-07T...",
+  "suggestedFileName": "LiteLoaderQQNT-AppAsar-Builder-v1.0.1-qq9.9.37-54395.zip",
   "loader": { "path": "C:/LiteLoaderQQNT", "exists": false, "mode": "运行时探测 (LQ_LOADER / 常见位置)" },
   "qq": { "manifestSource": "内置基线清单 (未找到本地 QQ)", "version": "9.9.37-54395", "buildVersion": "54395" },
-  "artifact": { "file": "app.asar", "size": 4631, "sha256": "...", "files": ["/app_launcher/index.js", "..."] }
+  "artifact": { "file": "app.asar", "size": 7222, "sha256": "...", "files": ["..."] }
 }
 ```
 
-`app.asar` 内部结构：
+`app.asar` 内部结构（比早期版本多一个 `lq-build.json`，纯元数据，不影响 QQ 启动）：
 
 ```
-package.json               # main: ./app_launcher/index.js
+package.json               # main: ./app_launcher/index.js（version 仍是 QQ 的，勿改）
+lq-build.json              # 构建器版本 / commit / 目标 QQ 版本 / 宿主模式
 app_launcher/index.js      # 宿主加载 + 本体入口兜底
 application/background.js  # 转发到原生 application.asar
 ```
+
+这样即使 `app.asar` 被单独拷走，也能追出它由哪个版本、哪个 commit 构建、面向哪个 QQ 版本。部署后随时查回：
+
+```bash
+node install.js --status
+
+# QQ 版本: 9.9.37-54395
+# 注入状态: 已注入
+# 构建器: LiteLoaderQQNT-AppAsar-Builder 1.0.1 commit dae682e
+# 构建时间: 2026-11-07T...
+# 产物目标 QQ: 9.9.37-54395 (与本机一致)
+# 宿主模式: 构建时固定
+```
+
+旧版产物（没有 `lq-build.json`）会提示「包内无 lq-build.json（旧版产物，无法溯源版本）」。
+
+> `package.json` 里的 `version` 必须保持 QQ 自己的版本号（如 `9.9.37-54395`），它会影响 QQ 内部版本判断；构建器版本只写在 `lq-build.json` 和 `build-info.json` 里。
 
 ## 七、故障排查
 

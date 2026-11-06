@@ -27,6 +27,11 @@ const asar = require("@electron/asar");
 
 const ROOT = __dirname;
 const SRC = path.join(ROOT, "src");
+const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+// 发布用前缀固定跟仓库名一致，不跟着 package.json 的 name 走（那个是历史遗留的内部包名）
+const ARTIFACT_PREFIX = "LiteLoaderQQNT-AppAsar";
+const BUILDER_NAME = `${ARTIFACT_PREFIX}-Builder`;
+const BUILDER_VERSION = PKG.version || "0.0.0";
 
 const DEFAULT_LOADER = String.raw`D:\App\LiteLoaderQQNT`;
 const DEFAULT_QQ = String.raw`D:\App\QQ`;
@@ -154,6 +159,22 @@ function sha256(file) {
     return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
+/** 构建来源：CI 用 GITHUB_SHA，本地退回 git，取不到则 null */
+function sourceCommit() {
+    if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
+    try {
+        return require("node:child_process")
+            .execSync("git rev-parse --short HEAD", {
+                cwd: ROOT,
+                encoding: "utf8",
+                stdio: ["ignore", "pipe", "ignore"],
+            })
+            .trim();
+    } catch {
+        return null;
+    }
+}
+
 async function build() {
     const loaderExists = fs.existsSync(loaderPath);
     if (!loaderExists) {
@@ -170,7 +191,6 @@ async function build() {
 
     const base = resolveBaseManifest();
     const manifestData = { ...base.data };
-
     if (qqVersionOverride) manifestData.version = qqVersionOverride;
     if (buildVersionOverride) manifestData.buildVersion = buildVersionOverride;
 
@@ -197,6 +217,45 @@ async function build() {
         if (manifest[key] === undefined) delete manifest[key];
     }
 
+    // ---------- 版本溯源 ----------
+    // 光靠 Release tag 不够：产物本身就是个 app.asar，离开 Release 页面后
+    // 既看不出构建器版本，也看不出目标 QQ 版本。这里把两者写进包内 lq-build.json，
+    // 并给出带版本号的发布文件名。
+    const loaderMode = loaderExists ? "构建时固定" : "运行时探测 (LQ_LOADER / 常见位置)";
+    const refName = process.env.GITHUB_REF_NAME || "";
+    const builder = {
+        name: BUILDER_NAME,
+        version: BUILDER_VERSION,
+        commit: sourceCommit(),
+        ref: refName || null,
+        ci: Boolean(process.env.GITHUB_ACTIONS),
+        runId: process.env.GITHUB_RUN_ID || null,
+    };
+    const builtAt = new Date().toISOString();
+    const displayTag = refName || `v${BUILDER_VERSION}`;
+    const qqVersion = manifest.version || "unknown";
+    // 例：LiteLoaderQQNT-AppAsar-v1.0.1-qq9.9.37-54395.zip
+    const suggestedFileName = `${BUILDER_NAME}-${displayTag}-qq${qqVersion}.zip`;
+
+    const asarMeta = {
+        builder: {
+            name: builder.name,
+            version: builder.version,
+            commit: builder.commit,
+            ref: builder.ref,
+        },
+        builtAt,
+        qq: {
+            name: manifest.name,
+            version: manifest.version || null,
+            buildVersion: manifest.buildVersion || null,
+        },
+        loader: {
+            mode: loaderMode,
+            path: loaderPath,
+        },
+    };
+
     const entrySource = fs.readFileSync(path.join(SRC, "app_launcher", "index.js"), "utf8");
     // 用 JSON.stringify 注入，天然处理反斜杠转义
     const entryCode = entrySource.replace("__LQ_LOADER_PATH__", JSON.stringify(loaderPath));
@@ -206,6 +265,7 @@ async function build() {
     fs.mkdirSync(path.join(staging, "app_launcher"), { recursive: true });
     fs.mkdirSync(path.join(staging, "application"), { recursive: true });
     fs.writeFileSync(path.join(staging, "package.json"), JSON.stringify(manifest, null, 2) + "\n", "utf8");
+    fs.writeFileSync(path.join(staging, "lq-build.json"), JSON.stringify(asarMeta, null, 2) + "\n", "utf8");
     fs.writeFileSync(path.join(staging, "app_launcher", "index.js"), entryCode, "utf8");
     fs.writeFileSync(
         path.join(staging, "application", "background.js"),
@@ -222,13 +282,15 @@ async function build() {
     const files = asar.listPackage(OUT);
 
     const info = {
-        builtAt: new Date().toISOString(),
+        builder,
+        builtAt,
+        suggestedFileName,
         node: process.version,
         platform: process.platform,
         loader: {
             path: loaderPath,
             exists: loaderExists,
-            mode: loaderExists ? "构建时固定" : "运行时探测 (LQ_LOADER / 常见位置)",
+            mode: loaderMode,
         },
         qq: {
             dir: qqDir,
@@ -247,9 +309,11 @@ async function build() {
     fs.writeFileSync(INFO, JSON.stringify(info, null, 2) + "\n", "utf8");
 
     console.log("已生成:", OUT, `(${size} 字节)`);
+    console.log("构建器版本:", builder.version, builder.commit ? `(${builder.commit})` : "", builder.ref ? `ref=${builder.ref}` : "");
     console.log("清单来源:", base.source);
     console.log("QQ 版本:", manifest.version || "(未设置)", "build:", manifest.buildVersion || "-");
     console.log("宿主路径:", loaderPath, loaderExists ? "(存在)" : "(不存在 → 运行时探测)");
+    console.log("建议发布文件名:", suggestedFileName);
     console.log("构建信息:", INFO);
     console.log("包内文件:");
     for (const item of files) console.log("  " + item);

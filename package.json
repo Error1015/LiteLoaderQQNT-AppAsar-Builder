@@ -1,6 +1,6 @@
 {
   "name": "create_asar",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "为 QQNT 生成注入 LiteLoader 宿主的 app.asar",
   "main": "build-asar.js",
   "scripts": {

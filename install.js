@@ -94,6 +94,27 @@ function status() {
     }
     console.log("注入状态: 已注入");
     console.log("app.asar:", target, `(${fs.statSync(target).size} 字节)`);
+
+    // 包内 lq-build.json：构建器版本 + 目标 QQ 版本，用来判断部署的是哪一版产物
+    let packed = null;
+    try {
+        packed = JSON.parse(asar.extractFile(target, "lq-build.json").toString("utf8"));
+    } catch {
+        packed = null;
+    }
+    if (packed) {
+        const b = packed.builder || {};
+        console.log("构建器:", [b.name, b.version, b.commit ? `commit ${b.commit}` : "", b.ref ? `ref ${b.ref}` : ""].filter(Boolean).join(" "));
+        console.log("构建时间:", packed.builtAt || "-");
+        if (packed.qq && packed.qq.version) {
+            const same = packed.qq.version === version;
+            console.log("产物目标 QQ:", packed.qq.version, same ? "(与本机一致)" : `(与本机 ${version} 不一致，建议重新构建)`);
+        }
+        if (packed.loader && packed.loader.mode) console.log("宿主模式:", packed.loader.mode);
+    } else {
+        console.log("版本信息: 包内无 lq-build.json（旧版产物，无法溯源版本）");
+    }
+
     try {
         const files = asar.listPackage(target);
         console.log("包内文件:", files.join(", "));
