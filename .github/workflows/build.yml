@@ -1,0 +1,105 @@
+name: build-app-asar
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      loader_path:
+        description: "LiteLoaderQQNT 目录（写入产物；运行期可被 LQ_LOADER 覆盖）"
+        required: false
+        default: "C:/LiteLoaderQQNT"
+      qq_version:
+        description: "覆盖清单版本号，如 9.9.37-54395（留空用内置基线）"
+        required: false
+        default: ""
+      build_version:
+        description: "覆盖 buildVersion，如 54395（留空用内置基线）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "20"
+  ARTIFACT_ZIP: LiteLoaderQQNT-AppAsar.zip
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 准备 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 安装依赖
+        # 必须 --ignore-scripts：package.json 曾用 "install" 钩子部署到本机 QQ，CI 上没有 QQ
+        run: npm ci --ignore-scripts
+
+      - name: 构建 app.asar
+        env:
+          LOADER: ${{ inputs.loader_path || vars.LQ_LOADER_PATH || 'C:/LiteLoaderQQNT' }}
+          QQ_VERSION: ${{ inputs.qq_version || vars.LQ_QQ_VERSION || '' }}
+          BUILD_VERSION: ${{ inputs.build_version || vars.LQ_BUILD_VERSION || '' }}
+        run: |
+          set -euo pipefail
+          args=(--loader="$LOADER" --allow-missing-loader --out=dist)
+          if [ -n "$QQ_VERSION" ]; then args+=(--qq-version="$QQ_VERSION"); fi
+          if [ -n "$BUILD_VERSION" ]; then args+=(--build-version="$BUILD_VERSION"); fi
+          node build-asar.js "${args[@]}"
+
+      - name: 打包发布产物
+        run: |
+          set -euo pipefail
+          cd dist
+          zip -r "../$ARTIFACT_ZIP" app.asar build-info.json
+          cd ..
+          ls -l dist/app.asar "$ARTIFACT_ZIP"
+
+      - name: 写入运行摘要
+        run: |
+          {
+            echo "## 构建结果"
+            echo ""
+            echo '```json'
+            cat dist/build-info.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiteLoaderQQNT-AppAsar
+          path: |
+            dist/app.asar
+            dist/build-info.json
+            ${{ env.ARTIFACT_ZIP }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 发布 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARTIFACT_ZIP }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            QQNT 的 `app.asar` 注入包（含 LiteLoaderQQNT 入口转发）。
+
+            ### 使用方法
+            1. 解压 `${{ env.ARTIFACT_ZIP }}`，得到 `app.asar` 与 `build-info.json`；
+            2. 备份 `QQ\versions\<版本>\resources\app.asar`（如已存在）；
+            3. 把 `app.asar` 覆盖到该目录，重启 QQ；
+            4. 若宿主不在默认位置，启动前设置环境变量 `LQ_LOADER=你的 LiteLoaderQQNT 目录`；
+               QQ 起不来时设 `LQ_INJECT_DISABLE=1` 可直连原生启动。
+
+            详细说明见仓库 README。

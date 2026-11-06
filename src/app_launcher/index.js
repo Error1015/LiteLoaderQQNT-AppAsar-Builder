@@ -7,6 +7,11 @@
  *   2. 如果宿主不存在 / 加载抛错 / 没有成功拉起本体入口，这里兜底 require 本体入口，
  *      保证 QQ 在宿主出问题时依然能正常启动。
  *
+ * 宿主路径解析顺序（第一个存在的即采用）：
+ *   1. 运行时环境变量 LQ_LOADER    —— 让同一份产物可以拷给宿主装在任意位置的人用
+ *   2. 构建时注入的路径 LOADER_PATH —— build-asar.js --loader= 写死
+ *   3. 常见安装位置自动探测
+ *
  * 紧急恢复：设置环境变量 LQ_INJECT_DISABLE=1 可跳过宿主，直接启动原生 QQ。
  */
 
@@ -64,18 +69,71 @@ function pickEntry() {
     return ENTRY_CANDIDATES[0];
 }
 
+function exists(target) {
+    try {
+        return Boolean(target) && fs.existsSync(target);
+    } catch {
+        return false;
+    }
+}
+
+/** 枚举宿主候选目录：环境变量 > 构建注入 > 常见安装位置 */
+function loaderCandidates() {
+    const list = [];
+    const push = (item) => {
+        if (item && !list.includes(item)) list.push(item);
+    };
+
+    // 1. 运行时覆盖
+    push(process.env.LQ_LOADER);
+    // 2. 构建时注入
+    push(LOADER_PATH);
+
+    // 3. 常见安装位置：<QQ>/LiteLoaderQQNT、<QQ 同级>/LiteLoaderQQNT、resources 内、%APPDATA%
+    try {
+        // RES = <QQ>/versions/<ver>/resources
+        const qqRoot = path.resolve(RES, "..", "..", "..");
+        push(path.join(qqRoot, "LiteLoaderQQNT"));
+        push(path.join(path.dirname(qqRoot), "LiteLoaderQQNT"));
+    } catch {
+        /* 路径推导失败则跳过 */
+    }
+    push(path.join(RES, "LiteLoaderQQNT"));
+    push(path.join(RES, "app", "LiteLoaderQQNT"));
+    push(process.env.APPDATA && path.join(process.env.APPDATA, "LiteLoaderQQNT"));
+    push(process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "LiteLoaderQQNT"));
+    push("C:\\LiteLoaderQQNT");
+    push("D:\\LiteLoaderQQNT");
+
+    return list;
+}
+
+function resolveLoader() {
+    const tried = [];
+    for (const item of loaderCandidates()) {
+        tried.push(item);
+        if (exists(item)) return { path: item, tried };
+    }
+    return { path: "", tried };
+}
+
 function loadLoader() {
     if (process.env.LQ_INJECT_DISABLE === "1") {
         log("LQ_INJECT_DISABLE=1，跳过宿主，直接启动原生 QQ");
         return false;
     }
-    if (!fs.existsSync(LOADER_PATH)) {
-        log("宿主目录不存在，跳过宿主:", LOADER_PATH);
+
+    const { path: loader, tried } = resolveLoader();
+    if (!loader) {
+        log("未找到 LiteLoaderQQNT 宿主，回退到 QQ 本体。可用 LQ_LOADER 环境变量指定目录。已尝试:");
+        for (const item of tried.slice(0, 4)) log("  -", item);
+        if (tried.length > 4) log(`  ... 共 ${tried.length} 个候选`);
         return false;
     }
+
     try {
-        require(LOADER_PATH);
-        log("宿主已加载:", LOADER_PATH);
+        require(loader);
+        log("宿主已加载:", loader);
         return true;
     } catch (err) {
         log("宿主加载失败，回退到 QQ 本体:", (err && err.message) || err);

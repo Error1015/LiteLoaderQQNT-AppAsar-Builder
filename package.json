@@ -5,13 +5,26 @@
   "main": "build-asar.js",
   "scripts": {
     "build": "node build-asar.js",
-    "install": "node install.js",
+    "build:ci": "node build-asar.js --allow-missing-loader --out=dist",
+    "deploy": "node install.js",
     "status": "node install.js --status",
     "restore": "node install.js --restore"
   },
-  "keywords": [],
+  "keywords": [
+    "qqnt",
+    "liteloaderqqnt",
+    "asar",
+    "electron"
+  ],
   "author": "",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Error1015/LiteLoaderQQNT-AppAsar-Builder.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "type": "commonjs",
   "devDependencies": {
     "@electron/asar": "^4.3.1"

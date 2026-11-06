@@ -1,0 +1,25 @@
+# 依赖与构建缓存
+node_modules/
+.staging/
+dist/
+
+# 构建产物（由 CI 或本地 build 生成，不跟踪）
+app.asar
+build-info.json
+
+# 本地个人配置（含本机绝对路径）
+.lqrc.json
+
+# 备份：只保留 QQ 原生清单/清单备份，产物备份不进仓库
+backup/app.asar.*.bak
+
+# 编辑器与系统垃圾
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+
+# WorkBuddy 项目记忆（本地数据）
+.workbuddy/
