@@ -6,6 +6,7 @@ dist/
 # 构建产物（由 CI 或本地 build 生成，不跟踪）
 app.asar
 build-info.json
+*.zip
 
 # 本地个人配置（含本机绝对路径）
 .lqrc.json

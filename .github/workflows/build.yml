@@ -60,17 +60,19 @@ jobs:
         id: meta
         run: |
           node -e "const fs=require('fs');const i=require('./dist/build-info.json');const o=process.env.GITHUB_OUTPUT;const w=(k,v)=>fs.appendFileSync(o,k+'='+v+'\n');w('zip',i.suggestedFileName);w('builder',i.builder.version);w('commit',i.builder.commit||'-');w('qq',i.qq.version||'unknown');w('loaderMode',i.loader.mode);"
-          echo "产物文件名: ${{ steps.meta.outputs.zip }}"
+          echo "--- GITHUB_OUTPUT ---"
+          cat "$GITHUB_OUTPUT"
 
       - name: 打包发布产物
         env:
           ZIP: ${{ steps.meta.outputs.zip }}
         run: |
           set -euo pipefail
-          cd dist
-          zip -r "../$ZIP" app.asar build-info.json
-          cd ..
+          # 用 -j 丢掉目录层级；不要在 cd dist 之后用 ../$ZIP 当归档路径，
+          # zip 会把它当成待压缩文件而报 "name not matched"
+          zip -j "$ZIP" dist/app.asar dist/build-info.json
           ls -l dist/app.asar "$ZIP"
+          unzip -l "$ZIP"
 
       - name: 写入运行摘要
         run: |
