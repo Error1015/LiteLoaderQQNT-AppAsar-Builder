@@ -95,8 +95,13 @@ setx LQ_LOADER "F:\Tools\LiteLoaderQQNT"   # 设一次，之后一直有效
 宿主加载失败时不会让 QQ 崩，会自动回退到原生启动，日志见 `[LQ-Inject]`。
 
 ## 四、GitHub Actions 构建 + 自动发布 Release
-
 工作流：[`.github/workflows/build.yml`](.github/workflows/build.yml)
+
+1. Fork 此仓库
+2. 进入`Actions`，点击`Workflows\build-app-asar`
+3. 点击Run workflow，传入本地的`LiteloaderQQNT`目录，`QQNT`的版本号，构建版本号
+4. 运行完毕后会自动上传到release，或者在` Artifacts `可以找到产物。
+
 
 ### 触发方式
 
@@ -183,6 +188,11 @@ src/application/background.js # 主进程转发壳
 .lqrc.example.json            # 本地路径配置示例
 backup/                       # 部署时的备份（application.json.bak 是修完整性校验的凭据，勿删）
 ```
+
+## 九、如何使用
+1. 把构建产物压缩包解压缩，得到`app.asar`和`build-info.json`，
+2. 将`app.asar`放入`QQNT`的目录`QQNT\versions\版本号\resources`，与`app`文件夹同目录
+3. 重新启动`QQNT`，确认插件安装成功。
 
 ## 免责声明
 
