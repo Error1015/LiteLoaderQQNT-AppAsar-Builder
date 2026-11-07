@@ -233,5 +233,5 @@ backup/                       # 部署时的备份（application.json.bak 是修
 仅供学习与个人使用。修改 QQ 客户端可能违反其服务条款，风险自负；操作前请确保 `backup/` 中的原生文件完整。
 
 # 鸣谢
-[LiteloaderQQNT](https://github.com/LiteLoaderQQNT/LiteLoaderQQNT)：若无`LiteLoaderQQNT`，这个仓库将不会存在。
+[LiteloaderQQNT](https://github.com/LiteLoaderQQNT/LiteLoaderQQNT)：若无`LiteLoaderQQNT`，这个仓库将不会存在。      
 感谢 **Cdm2883** 提供的实现思路。
