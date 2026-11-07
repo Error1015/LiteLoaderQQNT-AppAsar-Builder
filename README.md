@@ -227,6 +227,11 @@ backup/                       # 部署时的备份（application.json.bak 是修
 2. 将`app.asar`放入`QQNT`的目录`QQNT\versions\版本号\resources`，与`app`文件夹同目录
 3. 重新启动`QQNT`，确认插件安装成功。
 
+
 ## 免责声明
 
 仅供学习与个人使用。修改 QQ 客户端可能违反其服务条款，风险自负；操作前请确保 `backup/` 中的原生文件完整。
+
+# 鸣谢
+[LiteloaderQQNT](https://github.com/LiteLoaderQQNT/LiteLoaderQQNT)：若无`LiteLoaderQQNT`，这个仓库将不会存在。
+感谢 **Cdm2883** 提供的实现思路。
