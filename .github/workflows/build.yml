@@ -18,6 +18,19 @@ on:
         description: "覆盖 buildVersion，如 54395（留空用内置基线）"
         required: false
         default: ""
+      release_type:
+        description: "发布等级：none=只出构建产物 / prerelease=预发布 / release=正式发布"
+        type: choice
+        required: true
+        default: "none"
+        options:
+          - none
+          - prerelease
+          - release
+      release_tag:
+        description: "Release 标签（留空自动取 v<构建器版本>；标签已存在时会更新该 Release）"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -63,6 +76,35 @@ jobs:
           echo "--- GITHUB_OUTPUT ---"
           cat "$GITHUB_OUTPUT"
 
+      # 发布与否、用什么标签、是不是预发布，全部在这里判定一次，后续步骤只读输出
+      - name: 确定发布参数
+        id: rel
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # tag 触发：标签里带 '-'（如 v1.0.2-beta.1）视为预发布，语义交给版本号自己表达
+            TAG="${{ github.ref_name }}"
+            case "$TAG" in
+              *-*) PRE="true" ;;
+              *)   PRE="false" ;;
+            esac
+            ENABLED="true"
+            LEVEL="auto"
+          else
+            # 手动触发：发布等级由下拉框决定，空标签回退到 v<构建器版本>
+            TAG="${{ inputs.release_tag }}"
+            [ -n "$TAG" ] || TAG="v${{ steps.meta.outputs.builder }}"
+            case "${{ inputs.release_type }}" in
+              prerelease) PRE="true";  ENABLED="true";  LEVEL="prerelease" ;;
+              release)    PRE="false"; ENABLED="true";  LEVEL="release" ;;
+              *)          PRE="false"; ENABLED="false"; LEVEL="none" ;;
+            esac
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRE" >> "$GITHUB_OUTPUT"
+          echo "enabled=$ENABLED" >> "$GITHUB_OUTPUT"
+          echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+
       - name: 打包发布产物
         env:
           ZIP: ${{ steps.meta.outputs.zip }}
@@ -83,6 +125,7 @@ jobs:
             echo "- 目标 QQ：\`${{ steps.meta.outputs.qq }}\`"
             echo "- 宿主模式：${{ steps.meta.outputs.loaderMode }}"
             echo "- 产物：\`${{ steps.meta.outputs.zip }}\`"
+            echo "- 发布决策：${{ steps.rel.outputs.enabled == 'true' && format('`{0}`（prerelease={1}）', steps.rel.outputs.tag, steps.rel.outputs.prerelease) || '不发 Release，仅保留 artifact' }}"
             echo ""
             echo '```json'
             cat dist/build-info.json
@@ -101,10 +144,17 @@ jobs:
           retention-days: 30
 
       - name: 发布 Release
-        if: startsWith(github.ref, 'refs/tags/')
+        # tag 推送恒发；手动触发看 release_type（none 时跳过）
+        if: steps.rel.outputs.enabled == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }} · QQNT ${{ steps.meta.outputs.qq }}
+          tag_name: ${{ steps.rel.outputs.tag }}
+          # tag 已存在时 GitHub 会忽略此项；手动触发时用它把新标签钉在本次构建的 commit 上
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.rel.outputs.tag }} · QQNT ${{ steps.meta.outputs.qq }}
+          prerelease: ${{ steps.rel.outputs.prerelease }}
+          # 预发布不抢 Latest 标记，正式发布才更新
+          make_latest: ${{ steps.rel.outputs.prerelease == 'true' && 'false' || 'true' }}
           files: ${{ steps.meta.outputs.zip }}
           generate_release_notes: true
           fail_on_unmatched_files: true
@@ -117,6 +167,7 @@ jobs:
             | 目标 QQ 版本 | `${{ steps.meta.outputs.qq }}` |
             | 宿主路径模式 | ${{ steps.meta.outputs.loaderMode }} |
             | 产物文件 | `${{ steps.meta.outputs.zip }}` |
+            | 发布等级 | ${{ steps.rel.outputs.prerelease == 'true' && '预发布（pre-release）' || '正式发布' }} |
 
             `app.asar` 内含 `lq-build.json`，部署后可随时用 `node install.js --status` 查回本表信息。
 

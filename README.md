@@ -99,8 +99,8 @@ setx LQ_LOADER "F:\Tools\LiteLoaderQQNT"   # 设一次，之后一直有效
 
 1. Fork 此仓库
 2. 进入`Actions`，点击`Workflows\build-app-asar`
-3. 点击Run workflow，传入本地的`LiteloaderQQNT`目录，`QQNT`的版本号，构建版本号
-4. 运行完毕后会自动上传到release，或者在` Artifacts `可以找到产物。
+3. 点击Run workflow，传入本地的`LiteloaderQQNT`目录，`QQNT`的版本号，构建版本号，并选择**发布等级**
+4. 选 `prerelease` / `release` 时，跑完会自动创建 Release 并挂上产物；选 `none` 只构建，产物留在` Artifacts `（30 天）
 
 
 ### 触发方式
@@ -108,7 +108,19 @@ setx LQ_LOADER "F:\Tools\LiteLoaderQQNT"   # 设一次，之后一直有效
 | 方式 | 行为 |
 |---|---|
 | push tag（`v*`） | 构建 → 上传产物 → 自动创建 Release，附件名带 `v<构建器版本>-qq<QQ版本>` |
-| 手动 Run workflow | 只构建 + 上传 artifact（30 天），可临时指定宿主路径与 QQ 版本 |
+| 手动 Run workflow · `none`（默认） | 只构建 + 上传 artifact（30 天），可临时指定宿主路径与 QQ 版本 |
+| 手动 Run workflow · `prerelease` | 构建 + 自动创建**预发布** Release（勾选 pre-release，不抢 Latest 标记） |
+| 手动 Run workflow · `release` | 构建 + 自动创建正式 Release（更新 Latest 标记） |
+
+发布等级只在手动触发时生效；tag 推送的等级由标签名决定——含 `-` 的一律视为预发布：
+
+```bash
+git tag -a v1.0.2-beta.1 -m "v1.0.2-beta.1"   # → pre-release
+git tag -a v1.0.2        -m "v1.0.2"          # → 正式发布
+```
+
+手动触发的标签默认取 `v<构建器版本>`（如 `v1.0.1`），可用 `release_tag` 覆盖。
+若标签已存在，会更新同一个 Release（同名附件覆盖），不会重复创建。
 
 ### 发版
 
